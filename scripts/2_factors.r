@@ -34,7 +34,7 @@ fa(
   unclass() %>% 
   as_tibble(rownames = "var") %>% 
   
-  #plotting positions of indicators in two factor space
+  #plotting positions of indicators in two dimensional space
   ggplot(
     aes(group = var, x = MR1, y = MR2)
   ) +
@@ -48,7 +48,7 @@ fa(
     min.segment.length = 0
   ) +
   jtools::theme_nice() +
-  coord_cartesian(xlim = c(-.2,.8), ylim = c(-.2,.8)) +
+  coord_cartesian(xlim = c(-.22,.8), ylim = c(-.2,.8)) +
   ggtitle("Eurobarometer") +
   ylab("Promise") +
   xlab("Reservations") +
@@ -76,7 +76,7 @@ fa(
   unclass() %>% 
   as_tibble(rownames = "var") %>% 
   
-  #plotting positions of indicators in two factor space
+  #plotting positions of indicators in two dimensional space
   ggplot(
     aes(group = var, x = MR2, y = MR1)
   ) +
@@ -90,17 +90,15 @@ fa(
     min.segment.length = 0
   ) +
   jtools::theme_nice() +
-  coord_cartesian(xlim = c(-.2,.8), ylim = c(-.2,.8)) +
+  coord_cartesian(xlim = c(-.22,.8), ylim = c(-.2,.8)) +
   scale_y_continuous(position = "right") +
   ggtitle("World Values Survey") +
   ylab("Promise") +
   xlab("Reservations") +
   theme(plot.title = element_text(hjust = .5))
   
-ggsave("plots/factors.png")
+ggsave("plots/fig1.pdf", dpi = 350, units = "cm", width = 22, height = 12)
   
-
-
 
 
 

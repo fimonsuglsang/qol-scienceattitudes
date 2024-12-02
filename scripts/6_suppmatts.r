@@ -6,9 +6,84 @@ library(psych)
 
 
 
+# descriptive statistics --------------------------------------------------
+
+rawbarom %>% 
+  transmute(
+    ###Life satisfaction and life direction###
+    lifesat = as_factor(na_if(D70, 5)), #as factor, DK = NA
+    lifesat = fct_relevel(lifesat, c("Not at all satisfied", "Not very satisfied", "Fairly satisfied", "Very satisfied")),
+    lifedir = as_factor(na_if(D73_4, 4)),
+    lifedir = fct_relevel(lifedir, "Things are going in the wrong direction", "Neither the one nor the other (SPONTANEOUS)", "Things are going in the right direction"),
+    ###Outcomes###
+    across(matches("QA10_\\d"), na_if, 6), #DK = NA
+    across(matches("QA11_\\d"), na_if, 6), #DK = NA
+  ) %>% 
+  #putting together experimental questions
+  mutate(
+    QA10_1n2 = case_when(
+      is.na(QA10_1) == F ~ QA10_1, #different wordings, taken as one
+      is.na(QA10_2) == F ~ QA10_2
+    ),
+    QA11_4n5 = case_when(
+      is.na(QA11_4) == F ~ QA11_4, #different wordings, taken as one
+      is.na(QA11_5) == F ~ 6-QA11_5 #reversed above
+    )
+  ) %>% 
+  #reversing attitude items to have positive always be high
+  mutate(across(c(QA10_1n2, QA10_3, QA10_4, QA10_5, QA10_6), \(x) 6-x)) %>% 
+  select(-QA10_1, -QA10_2, -QA11_4, -QA11_5) %>% 
+  
+  modelsummary::datasummary_skim(type = "numeric", output = "flextable") %>% 
+  flextable::save_as_docx(path = "tables/eudecrnum.docx")
+
+rawbarom %>% 
+  transmute(
+    ###Life satisfaction and life direction###
+    lifesat = as_factor(na_if(D70, 5)), #as factor, DK = NA
+    lifesat = fct_relevel(lifesat, c("Not at all satisfied", "Not very satisfied", "Fairly satisfied", "Very satisfied")),
+    lifedir = as_factor(na_if(D73_4, 4)),
+    lifedir = fct_relevel(lifedir, "Things are going in the wrong direction", "Neither the one nor the other (SPONTANEOUS)", "Things are going in the right direction"),
+    ###Outcomes###
+    across(matches("QA10_\\d"), na_if, 6), #DK = NA
+    across(matches("QA11_\\d"), na_if, 6), #DK = NA
+  ) %>% 
+  #putting together experimental questions
+  mutate(
+    QA10_1n2 = case_when(
+      is.na(QA10_1) == F ~ QA10_1, #different wordings, taken as one
+      is.na(QA10_2) == F ~ QA10_2
+    ),
+    QA11_4n5 = case_when(
+      is.na(QA11_4) == F ~ QA11_4, #different wordings, taken as one
+      is.na(QA11_5) == F ~ 6-QA11_5 #reversed above
+    )
+  ) %>% 
+  #reversing attitude items to have positive always be high
+  mutate(across(c(QA10_1n2, QA10_3, QA10_4, QA10_5, QA10_6), \(x) 6-x)) %>% 
+  
+  modelsummary::datasummary_skim(type = "categorical", output = "flextable") %>% 
+  flextable::save_as_docx(path = "tables/eudecrcat.docx")
+
+
+rawwvs %>% 
+  transmute(
+    ###Life satisfation and life control###
+    lifesat = case_when(Q49>0 ~ Q49),
+    lifecontrol = case_when(Q48>0 ~ Q48),
+    ###Outcomes###
+    across(c(Q158:Q163), ~case_when(.>0 ~ .))
+  ) %>% 
+  #reversing attitude items to have positive always be high
+  mutate(across(c(Q160, Q161, Q162), \(x) 11-x))  %>% 
+  
+  modelsummary::datasummary_skim(type = "numeric", output = "flextable") %>% 
+  flextable::save_as_docx(path = "tables/wvsdecr.docx")
+
+
 # Items -------------------------------------------------------------------
 
-#making tables of factorloadings, and saving as docx
+#making tables of factor loadings, and saving as .docx
 
 fa(
   cor(
@@ -65,6 +140,339 @@ fa(
   flextable::save_as_docx(path = "tables/wvsitems.docx")
 
 
+
+# cross country factor scores ---------------------------------------------
+
+
+# barom -------------------------------------------------------------------
+
+
+
+cleanbarom %>% 
+  select(country) %>% 
+  distinct() %>% 
+  as_vector() -> clist
+
+cfactoreu <- tibble()
+
+for(i in 1:length(clist)) {
+  
+  temp <- filter(cleanbarom, country == clist[i])
+  
+  bind_rows(
+    cfactoreu,
+    fa(
+      cor(
+        select(
+          #renaming variables
+          temp,
+          "better lives" = QA10_1n2,
+          "informed citizens" = QA10_3,
+          "natural resources" = QA10_4,
+          "opportunities" = QA10_5,
+          "AI = jobs" = QA10_6,
+          "science v. faith" = QA10_7,
+          "human rights" = QA10_8,
+          "life change too fast" = QA10_9,
+          "dangerous knowledge" = QA10_10,
+          "special interests" = QA11_1,
+          "specific knowledge" = QA11_2,
+          "too complex" = QA11_3,
+          "intervene in politics" = QA11_4n5,
+          "misuse by others" = QA11_6
+        ), 
+        use = "pairwise.complete.obs"
+      ),
+      2
+    ) %>% 
+      loadings() %>% 
+      unclass() %>% 
+      as_tibble(rownames = "var") %>% 
+      mutate(country = clist[i])
+  ) -> cfactoreu
+  
+  print(paste(i,"of 38:", unique(temp$country)))
+}
+
+
+#Figure
+
+bind_rows(
+  
+  filter(
+    cfactoreu,
+    country != "Albania" &
+      country != "Kosovo" &
+      country != "Montenegro"
+  ) %>% 
+    rename(
+      Promise = MR2,
+      Reservations = MR1
+    ),
+  filter(
+    cfactoreu,
+    country == "Albania" |
+      country == "Kosovo" |
+      country == "Montenegro"
+  ) %>% 
+    rename(
+      Promise = MR1,
+      Reservations = MR2
+    )
+) %>% 
+  mutate(var = fct_reorder(var, Promise, mean) %>% fct_rev()) %>% 
+  
+  ggplot(
+    aes(group = var, x = Reservations, y = Promise)
+  ) +
+  geom_hline(yintercept = 0, linetype = "longdash") +
+  geom_vline(xintercept = 0, linetype = "longdash") +
+  geom_point() +
+  jtools::theme_nice() +
+  scale_y_continuous(position = "right") +
+  ylab("") +
+  xlab("") +
+  theme(plot.title = element_text(hjust = .5)) +
+  facet_wrap(var~., ncol = 3)
+
+
+ggsave("plots/figA1.pdf", dpi = 350, units = "cm", width = 18, height = 18)
+
+
+# wvs ---------------------------------------------------------------------
+
+
+
+cleanwvs %>% 
+  select(country) %>% 
+  distinct() %>% 
+  as_vector() -> clist
+
+cfactorwvs <- tibble()
+
+for(i in 1:50) {
+  
+  temp <- filter(cleanwvs, !is.na(pol), !is.na(class), !is.na(prom), !is.na(country))
+  temp <- filter(cleanwvs, country == clist[i])
+  
+  
+  bind_rows(
+    cfactorwvs,
+    fa(
+      cor(
+        select(
+          #renaming variables
+          temp,
+          "better lives" = Q158,
+          "opportunities" = Q159,
+          "science v. faith" = Q160,
+          "blur right/wrong" = Q161,
+          "daily life" = Q162,
+          "world better off" =Q163
+        ), 
+        use = "pairwise.complete.obs"
+      ),
+      2
+    ) %>% 
+      loadings() %>% 
+      unclass() %>% 
+      as_tibble(rownames = "var") %>% 
+      mutate(country = clist[i])
+  ) -> cfactorwvs
+  print(paste(i,"of 50:", unique(temp$country)))
+}
+
+#Figure
+
+bind_rows(
+  filter(cfactorwvs, country != "Indonesia") %>% 
+    rename(Promise = MR1,Reservations = MR2),
+  filter(cfactorwvs, country == "Indonesia") %>% 
+    rename(Promise = MR2, Reservations = MR1)
+) %>% 
+  mutate(var = fct_reorder(var, Promise, mean) %>% fct_rev()) %>% 
+  
+  ggplot(
+    aes(group = var, x = Reservations, y = Promise)
+  ) +
+  geom_hline(yintercept = 0, linetype = "longdash") +
+  geom_vline(xintercept = 0, linetype = "longdash") +
+  geom_point() +
+  jtools::theme_nice() +
+  scale_y_continuous(position = "right") +
+  ylab("") +
+  xlab("") +
+  theme(plot.title = element_text(hjust = .5)) +
+  facet_wrap(var~., ncol = 2)
+
+
+ggsave("plots/figA2.pdf", dpi = 350, units = "cm", width = 18, height = 18)
+
+# barom -------------------------------------------------------------------
+
+cleanbarom %>% 
+  select(country) %>% 
+  distinct() %>% 
+  as_vector() -> clist
+
+cfactoreu <- tibble()
+
+for(i in 1:length(clist)) {
+  
+  temp <- filter(cleanbarom, country == clist[i])
+  
+  bind_rows(
+    cfactoreu,
+    fa(
+      cor(
+        select(
+          #renaming variables
+          temp,
+          "better lives" = QA10_1n2,
+          "informed citizens" = QA10_3,
+          "natural resources" = QA10_4,
+          "opportunities" = QA10_5,
+          "AI = jobs" = QA10_6,
+          "science v. faith" = QA10_7,
+          "human rights" = QA10_8,
+          "life change too fast" = QA10_9,
+          "dangerous knowledge" = QA10_10,
+          "special interests" = QA11_1,
+          "specific knowledge" = QA11_2,
+          "too complex" = QA11_3,
+          "intervene in politics" = QA11_4n5,
+          "misuse by others" = QA11_6
+        ), 
+        use = "pairwise.complete.obs"
+      ),
+      2
+    ) %>% 
+      loadings() %>% 
+      unclass() %>% 
+      as_tibble(rownames = "var") %>% 
+      mutate(country = clist[i])
+  ) -> cfactoreu
+  
+  print(paste(i,"of 38:", unique(temp$country)))
+}
+
+
+#Figure
+
+bind_rows(
+  
+  filter(
+    cfactoreu,
+    country != "Albania" &
+      country != "Kosovo" &
+      country != "Montenegro"
+  ) %>% 
+    rename(
+      Promise = MR2,
+      Reservations = MR1
+    ),
+  filter(
+    cfactoreu,
+    country == "Albania" |
+      country == "Kosovo" |
+      country == "Montenegro"
+  ) %>% 
+    rename(
+      Promise = MR1,
+      Reservations = MR2
+    )
+) %>% 
+  mutate(var = fct_reorder(var, Promise, mean) %>% fct_rev()) %>% 
+  
+  ggplot(
+    aes(group = var, x = Reservations, y = Promise)
+  ) +
+  geom_hline(yintercept = 0, linetype = "longdash") +
+  geom_vline(xintercept = 0, linetype = "longdash") +
+  geom_point() +
+  jtools::theme_nice() +
+  scale_y_continuous(position = "right") +
+  ylab("") +
+  xlab("") +
+  theme(plot.title = element_text(hjust = .5)) +
+  facet_wrap(var~., ncol = 2)
+
+ggsave("plots/figA1.pdf", dpi = 350, units = "cm", width = 18, height = 18)
+
+
+# wvs ---------------------------------------------------------------------
+
+
+
+cleanwvs %>% 
+  select(country) %>% 
+  distinct() %>% 
+  as_vector() -> clist
+
+cfactorwvs <- tibble()
+
+for(i in 1:50) {
+  
+  temp <- filter(cleanwvs, !is.na(pol), !is.na(class), !is.na(prom), !is.na(country))
+  temp <- filter(cleanwvs, country == clist[i])
+  
+  
+  bind_rows(
+    cfactorwvs,
+    fa(
+      cor(
+        select(
+          #renaming variables
+          temp,
+          "better lives" = Q158,
+          "opportunities" = Q159,
+          "science v. faith" = Q160,
+          "blur right/wrong" = Q161,
+          "daily life" = Q162,
+          "world better off" =Q163
+        ), 
+        use = "pairwise.complete.obs"
+      ),
+      2
+    ) %>% 
+      loadings() %>% 
+      unclass() %>% 
+      as_tibble(rownames = "var") %>% 
+      mutate(country = clist[i])
+  ) -> cfactorwvs
+  print(paste(i,"of 50:", unique(temp$country)))
+}
+
+#Figure
+
+
+
+bind_rows(
+  filter(cfactorwvs, country != "Indonesia") %>% 
+    rename(Promise = MR1,Reservations = MR2),
+  filter(cfactorwvs, country == "Indonesia") %>% 
+    rename(Promise = MR2, Reservations = MR1)
+) %>% 
+  mutate(var = fct_reorder(var, Promise, mean) %>% fct_rev()) %>% 
+  
+  ggplot(
+    aes(group = var, x = Reservations, y = Promise)
+  ) +
+  geom_hline(yintercept = 0, linetype = "longdash") +
+  geom_vline(xintercept = 0, linetype = "longdash") +
+  geom_point() +
+  jtools::theme_nice() +
+  scale_y_continuous(position = "right") +
+  ylab("") +
+  xlab("") +
+  theme(plot.title = element_text(hjust = .5)) +
+  facet_wrap(var~., ncol = 2)
+
+
+ggsave("plots/figA2.pdf", dpi = 350, units = "cm", width = 18, height = 10)
+
+
+
 # Regressions -------------------------------------------------------------
 
 #making tables of regressions and saving as docx
@@ -95,121 +503,4 @@ modelsummary::modelsummary(
 ) %>% 
   flextable::save_as_docx(path = "tables/wvsregs.docx")
 
-
-# Res world regs ----------------------------------------------------------
-
-#reproducing figure from "world.r" for the reservations outcome
-
-cpreds_wvs <- tibble()
-
-#countries with data on all vars
-for(i in c(1:50)){
-  
-  temp <- filter(cleanwvs, !is.na(pol), !is.na(class), !is.na(res), !is.na(country))
-  temp <- filter(temp, country == unique(temp$country)[i])
-  
-  temp <- mutate(temp, 
-                 lifesat = (lifesat-mean(lifesat, na.rm = T))/sd(lifesat, na.rm = T),
-                 lifecontrol = (lifecontrol-mean(lifecontrol, na.rm = T))/sd(lifecontrol, na.rm = T)
-  )
-  
-  print(paste(i,"of 50:", unique(temp$country)))
-  
-  cpreds_wvs <- bind_rows(
-    cpreds_wvs,
-    lm(data = temp, res~sex+age+pol+rel+edu+class+income+lifesat) %>% 
-      broom::tidy() %>% 
-      filter(term == "lifesat") %>%
-      mutate(country = unique(temp$country)),
-    
-    lm(data = temp, res~sex+age+pol+rel+edu+class+income+lifecontrol) %>% 
-      broom::tidy() %>% 
-      filter(term == "lifecontrol") %>%
-      mutate(country = unique(temp$country))
-  )
-}
-
-cpreds_eu <- tibble()
-
-#countries with data on all vars
-for(i in c(1:38)){
-  
-  temp <- filter(cleanbarom, country == unique(cleanbarom$country)[i])
-  
-  temp <- mutate(temp, 
-                 lifesat = (as.numeric(lifesat)-mean(as.numeric(lifesat), na.rm = T))/sd(as.numeric(lifesat), na.rm = T),
-                 lifedir = (as.numeric(lifedir)-mean(as.numeric(lifedir), na.rm = T))/sd(as.numeric(lifedir), na.rm = T)
-  )
-  
-  print(paste(i,"of 38:", unique(cleanbarom$country)[i]))
-  
-  cpreds_eu <- bind_rows(
-    cpreds_eu,
-    lm(data = temp, res~gender+age+pol+rel+edu+class+scilit+scieng+lifesat) %>% 
-      broom::tidy() %>% 
-      filter(term == "lifesat") %>%
-      mutate(country = unique(temp$country)),
-    
-    lm(data = temp, res~gender+age+pol+rel+edu+class+scilit+scieng+lifedir) %>% 
-      broom::tidy() %>% 
-      filter(term == "lifedir") %>%
-      mutate(country = unique(temp$country))
-  )
-}
-
-
-#figure
-cpreds_wvs %>%
-  mutate(
-    sig = case_when(p.value<.05 ~ T, .default = F),
-    term = case_when(
-      term == "lifesat" ~ "Satisfaction",
-      term == "lifecontrol" ~ "Control"
-    ),
-    term = fct_inorder(term)
-  ) %>% 
-  ggplot(aes(y = tidytext::reorder_within(country, estimate, term))) +
-  tidytext::scale_y_reordered() +
-  jtools::theme_nice() +
-  theme(axis.text.y = element_text(hjust = 1)) +
-  ggtitle("WVS") +
-  
-  cpreds_eu %>%
-  mutate(
-    sig = case_when(p.value<.05 ~ T, .default = F),
-    term = case_when(
-      term == "lifesat" ~ "Satisfaction",
-      term == "lifedir" ~ "Direction"
-    ),
-    term = fct_inorder(term)
-  ) %>% 
-  ggplot(aes(y = tidytext::reorder_within(country, estimate, term))) +
-  tidytext::scale_y_reordered(position = "right") +
-  jtools::theme_nice() +
-  ggtitle("EU") +
-  
-  plot_layout(ncol=2) &
-  ylab("") &
-  coord_cartesian(xlim = c(-.2, .3)) &
-  theme(plot.title = element_text(hjust = .5)) &
-  geom_vline(xintercept = 0, linetype = "dashed") &
-  geom_pointrange(
-    aes(
-      fill = sig,
-      color = sig,
-      x = estimate, 
-      xmin = estimate-1.96*std.error, 
-      xmax = estimate+1.96*std.error
-    ),
-    shape = 21,
-    size = .4
-  ) &
-  scale_fill_manual(values = c("white", "black")) &
-  scale_color_manual(values = c("gray40", "black")) &
-  scale_x_continuous(breaks = seq(0, .4, by = .2)) &
-  facet_wrap(term~., scales = "free_y", ncol = 1) &
-  xlab("") &
-  theme(legend.position = "none")
-
-ggsave("plots/world_res.png")
 

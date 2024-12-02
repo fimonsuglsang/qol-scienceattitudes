@@ -5,6 +5,22 @@ library(tidyverse)
 library(psych)
 
 
+#country info
+
+read_delim("data/unccodes.csv") %>% 
+  select(country = "Country or Area",
+         region = "Region Name",
+         subregion = "Sub-region Name",
+         ccode = "ISO-alpha3 Code") %>% 
+  add_row(ccode = "NIR", country = "Northern Ireland", region = "Europe", subregion = "Northern Europe") %>% 
+  add_row(ccode = "XKK", country = "Kosovo", region = "Europe", subregion = "Southern Europe") %>% 
+  add_row(ccode = "TWN", country = "Taiwan", region = "Asia", subregion = "Eastern Asia") %>% 
+  mutate(country = str_remove(country, " \\(.*\\)")) %>% 
+  mutate(country = str_remove(country, " of G.*")) %>% 
+  mutate(country = str_remove(country, ".*, ")) %>% 
+  mutate(country = str_remove(country, " Special.*")) -> cinfo
+
+
 # BAROM -------------------------------------------------------------------
 
 #reading eurobarometer data
@@ -50,12 +66,15 @@ rawbarom %>%
     )
   ) %>% 
   
+  #reversing attitude items to have positive always be high
+  mutate(across(c(QA10_1n2, QA10_3, QA10_4, QA10_5, QA10_6), \(x) 6-x)) %>% 
+
   #science literary and engagement measure
   mutate(
     scilit = rowSums(select(., paste0("QA20_", c(1:6, 8:9)))),
     scieng = rowMeans(select(., QA14_1:QA14_12))
-  ) -> cleanbarom
-
+  ) %>% 
+  filter(country != "Albania") -> cleanbarom
 
 #factor scores for outcomes
 bind_cols(
@@ -77,15 +96,13 @@ bind_cols(
     as_tibble() %>% 
     rename(res = MR1, prom = MR2)
 ) %>%
-  #standardizing and fixing direction
+  #standardizing
   mutate(
     across(
       c(prom, res, pol, rel, edu, scilit, scieng),
       \(x) (x-mean(x, na.rm = T))/sd(x, na.rm = T)
-    ),
-    prom = prom*-1, #reversed to have positive high
+    )
   )  -> cleanbarom
-
 
 
 # WVS ---------------------------------------------------------------------
@@ -113,14 +130,15 @@ rawwvs %>%
     class = case_when(Q287>0 ~ Q287) %>% as_factor(),
     edu = case_when(Q275>0 ~ Q275),
     income = case_when(Q288>0 ~ Q288)
-  ) -> cleanwvs
+  ) %>% 
+  #reversing attitude items to have positive always be high
+  mutate(across(c(Q160, Q161, Q162), \(x) 11-x)) -> cleanwvs
 
 #country names
 left_join(
   cleanwvs,
-  read_csv("data/countrycodes.csv") %>% rename(ccode = 3),
-) %>% 
-  rename(country = name) -> cleanwvs
+  cinfo
+) -> cleanwvs
 
 #factor scores for outcomes
 bind_cols(
@@ -147,6 +165,3 @@ bind_cols(
       \(x) (x-mean(x, na.rm = T))/sd(x, na.rm = T)
     )
   ) -> cleanwvs
-
-
-
